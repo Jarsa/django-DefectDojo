@@ -21,15 +21,8 @@ services:
       DD_UWSGI_PORT: "${DD_UWSGI_PORT:-3031}"
     volumes:
       - defectdojo_media:/usr/share/nginx/html/media
-    ports:
-      - target: 8080
-        published: ${DD_PORT:-8080}
-        protocol: tcp
-        mode: host
-      - target: 8443
-        published: ${DD_TLS_PORT:-8443}
-        protocol: tcp
-        mode: host
+    # sin ports en el host: traefik (coolify-proxy) enruta por la red docker
+    # y ya ocupa 8080/8443 en el host
   uwsgi:
     build:
       context: ./
