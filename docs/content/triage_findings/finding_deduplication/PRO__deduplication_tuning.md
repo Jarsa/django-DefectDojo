@@ -50,6 +50,36 @@ Attempts to use the tool's unique ID first, then falls back to the hash code if 
 #### Global Component
 Matches findings by component name and version across **all Products** in the instance, rather than within a single Product or Engagement. Intended for SCA tools where the same vulnerable dependency appears in many Products. This algorithm is off by default and must be enabled by DefectDojo Support. See [Global Component Deduplication](/triage_findings/finding_deduplication/pro__global_component_deduplication/) for details.
 
+#### Global Vulnerability ID
+Matches findings by their **vulnerability IDs** (CVE, GHSA, …) across **all Products** in the instance, rather than within a single Product or Engagement. Intended for tools that report the same CVE across many Products. Off by default and enabled by DefectDojo Support.
+
+> **Two tools on the same instance-wide algorithm become mutual deduplication candidates.** When two *different* tools are both configured with an instance-wide algorithm (Global Component, or Global Vulnerability ID), their findings share a constant grouping hash, so a finding from either tool is considered for deduplication against the other on that shared dimension (component, or vulnerability ID). This is the intended cross-tool behavior — enable it only when you want those tools to dedupe together.
+
+### Set-based Hash Code Fields (Vulnerability IDs and CWEs)
+
+Two finding attributes hold a *set* of values rather than a single value: vulnerability IDs (CVE, GHSA, …) and CWEs. When using the **Hash Code** algorithm (Same Tool or Cross Tool), you can add the following fields to **Hash Code Fields** to control how those sets are compared:
+
+| Field | Findings are duplicates when… |
+|-------|-------------------------------|
+| `vulnerability_ids` | they have the **exact same set** of vulnerability IDs |
+| `vulnerability_ids_partial` | they share **at least one** vulnerability ID |
+| `vulnerability_ids_subset` | one finding's vulnerability IDs are a **subset** of the other's |
+| `cwes` | they have the **exact same set** of CWEs |
+| `cwes_partial` | they share **at least one** CWE |
+| `cwes_subset` | one finding's CWEs are a **subset** of the other's |
+
+The `_partial` and `_subset` fields are compared per finding pair rather than folded into the hash: the remaining Hash Code Fields group the candidate findings, and the set comparison then narrows that group. (Exact matching — `vulnerability_ids` and `cwes` — is folded into the hash directly.)
+
+**Empty values.** If a finding has no vulnerability IDs (or no CWEs) for the configured matcher:
+
+- If Hash Code Fields also include an ordinary field (for example `title`), that field carries the identity — the set matcher is skipped for the pair and the findings can still match on the rest of the hash.
+- If a set matcher is the **only** field, a finding with no values does not match anything: with nothing else to identify it, an empty set is not treated as matching every other finding.
+
+**Configuration rules** (enforced when you save settings):
+
+- A vulnerability IDs field (`vulnerability_ids`, `vulnerability_ids_partial`, or `vulnerability_ids_subset`) may be used on its own — a CVE or GHSA identifies a specific vulnerability instance.
+- CWE fields (`cwes`, `cwes_partial`, `cwes_subset`) may **not** be the only criteria. A CWE is a weakness *class*, not a specific instance, so matching on CWE alone would merge unrelated findings. Pair a CWE matcher with an identifying field such as `title` or `file_path`.
+
 ## Cross Tool Deduplication
 
 Cross Tool Deduplication is disabled by default, as deduplication between different security tools requires careful configuration due to variations in how tools report the same vulnerabilities.
@@ -101,6 +131,8 @@ What this means in practice:
 If you make several configuration changes in quick succession, each one queues its own re-hash job.  Allow the previous job to finish before evaluating results, especially when comparing Findings counts before and after the change.
 
 > **Note for self-hosted Pro:** The background job runs in the Celery worker pool.  If you have starved or backlogged workers, the re-hash can take longer than expected — check worker health if results don't appear within the timeframe you would expect for your instance size.
+
+> **Feature flags do not gate an existing configuration.** A tool's saved Deduplication Settings stay in effect for as long as they are configured; turning off a related feature flag does **not** retroactively revert that tool to default deduplication. To change or stop a tool's deduplication behavior, update its Deduplication Settings directly (which also queues the background re-hash described above).
 
 ## Deduplication Best Practices
 
